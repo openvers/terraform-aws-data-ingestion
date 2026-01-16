@@ -32,13 +32,13 @@ variable "aws_region" {
 variable "GITHUB_REPOSITORY_OWNER" {
   type        = string
   description = "Github Actions Default ENV Variable for the Repo Owner"
-  default     = "sim-parables"
+  default     = "openverse"
 }
 
 variable "GITHUB_REPOSITORY" {
   type        = string
   description = "Github Actions Default ENV Variable for the Repo Path"
-  default     = "sim-parables/terraform-aws-service-account"
+  default     = "openverse/terraform-aws-service-account"
 }
 
 variable "GITHUB_REF" {

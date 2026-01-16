@@ -11,22 +11,22 @@ terraform {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS LAMBDA FUNCTION MODULE
-## 
+##
 ## Create a HTTP trigger AWS Lambda Function for Data Ingestion into S3 Data Lake.
-## 
+##
 ## Parameters:
 ## - `function_name`: AWS Lambda Function name.
 ## - `function_handler`: AWS Lambda Function source handler function name.
 ## - `bucket_ids`: List of S3 Bucket names for the data layers.
 ## - `function_runtime`: AWS Lambda Function runtime environment.
 ## - `kms_key_arn`: KMS encryption key ARN.
-## - `sns_topic_arn`: SNS Topic ARN for Dead Letter Queue. 
+## - `sns_topic_arn`: SNS Topic ARN for Dead Letter Queue.
 ## - `function_contents`: List of function source code to archive and artifact for Lambda Functions.
 ## - `function_dependencies`: List of Python packages to install as dependencies for the Lambda Function.
 ## - `function_environment_variables`: Environment variables to set for the Lambda Function.
 ## ---------------------------------------------------------------------------------------------------------------------
 module "aws_lambda_function" {
-  source = "./modules/aws_lambda"
+  source = "./modules/aws_lambda_python_app"
 
   function_name                  = var.function_name
   function_handler               = var.function_handler
@@ -47,9 +47,9 @@ module "aws_lambda_function" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS API GATEWAY REST API RESOURCE
-## 
+##
 ## Create an API Gateway REST API to trigger the Lambda function via HTTP request.
-## 
+##
 ## Parameters:
 ## - `name`: API Gateway REST API name.
 ## - `description`: API Gateway REST API description.
@@ -63,9 +63,9 @@ resource "aws_api_gateway_rest_api" "this" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS API GATEWAY RESOURCE
-## 
+##
 ## Define a resource in the API Gateway REST API.
-## 
+##
 ## Parameters:
 ## - `rest_api_id`: The ID of the REST API.
 ## - `parent_id`: The ID of the parent resource.
@@ -76,14 +76,14 @@ resource "aws_api_gateway_resource" "this" {
 
   rest_api_id = aws_api_gateway_rest_api.this.id
   parent_id   = aws_api_gateway_rest_api.this.root_resource_id
-  path_part   = var.api_path
+  path_part   = "{proxy+}"
 }
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS API GATEWAY METHOD RESOURCE
-## 
+##
 ## Define a method for the API Gateway resource.
-## 
+##
 ## Parameters:
 ## - `rest_api_id`: The ID of the REST API.
 ## - `resource_id`: The ID of the resource.
@@ -98,13 +98,17 @@ resource "aws_api_gateway_method" "this" {
   http_method      = var.api_method
   authorization    = "NONE"
   api_key_required = true
+
+  request_parameters = {
+    "method.request.path.proxy" = true
+  }
 }
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS API GATEWAY INTEGRATION RESOURCE
-## 
+##
 ## Define an integration for the API Gateway method.
-## 
+##
 ## Parameters:
 ## - `rest_api_id`: The ID of the REST API.
 ## - `resource_id`: The ID of the resource.
@@ -121,14 +125,15 @@ resource "aws_api_gateway_integration" "this" {
   http_method             = aws_api_gateway_method.this.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
+  passthrough_behavior    = "WHEN_NO_MATCH"
   uri                     = module.aws_lambda_function.lambda_function_invoke_arn
 }
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS LAMBDA PERMISSION RESOURCE
-## 
+##
 ## Grant API Gateway permission to invoke the Lambda function.
-## 
+##
 ## Parameters:
 ## - `statement_id`: Unique statement identifier for the policy.
 ## - `action`: Lambda action to allow (typically "lambda:InvokeFunction").
@@ -161,9 +166,9 @@ resource "aws_api_gateway_stage" "this" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS API GATEWAY DEPLOYMENT RESOURCE
-## 
+##
 ## Deploy the API Gateway REST API to a specific stage, making changes live.
-## 
+##
 ## Parameters:
 ## - `rest_api_id`: The ID of the REST API to deploy.
 ## ---------------------------------------------------------------------------------------------------------------------
@@ -176,24 +181,24 @@ resource "aws_api_gateway_deployment" "this" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS API GATEWAY API KEY RESOURCE
-## 
+##
 ## Create an API key for authenticating requests to the API Gateway.
-## 
+##
 ## Parameters:
 ## - `name`: Name of the API key.
 ## ---------------------------------------------------------------------------------------------------------------------
 resource "aws_api_gateway_api_key" "this" {
   provider = aws.auth_session
 
-  name    = "${var.function_name}-${var.api_stage}-${var.api_path}-api-key"
+  name    = "${var.function_name}-${var.api_stage}-api-key"
   enabled = true
 }
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS API GATEWAY USAGE PLAN RESOURCE
-## 
+##
 ## Create a usage plan to associate the API key with the API Gateway stage.
-## 
+##
 ## Parameters:
 ## - `name`: Name of the usage plan.
 ## - `description`: Description of the usage plan.
@@ -203,7 +208,7 @@ resource "aws_api_gateway_api_key" "this" {
 resource "aws_api_gateway_usage_plan" "this" {
   provider = aws.auth_session
 
-  name        = "${var.function_name}-${var.api_stage}-${var.api_path}-usage-plan"
+  name        = "${var.function_name}-${var.api_stage}-usage-plan"
   description = "${title(replace(var.function_name, "-", " "))} Usage Plan"
 
   api_stages {
@@ -219,9 +224,9 @@ resource "aws_api_gateway_usage_plan" "this" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS API GATEWAY USAGE PLAN KEY RESOURCE
-## 
+##
 ## Associate the API key with the usage plan.
-## 
+##
 ## Parameters:
 ## - `key_id`: The API key ID.
 ## - `key_type`: The type of key (must be "API_KEY").

@@ -71,7 +71,7 @@ variable "function_trigger_events" {
 variable "function_runtime" {
   type        = string
   description = "AWS Lambda Function Runtime Environment"
-  default     = "python3.9"
+  default     = "python3.12"
 }
 
 variable "function_memory" {
@@ -81,13 +81,13 @@ variable "function_memory" {
 }
 
 variable "function_dependencies" {
-  type = list(object({
+  type = map(list(object({
     package_name    = string
     package_version = string
     no_dependencies = bool
-  }))
+  })))
   description = "AWS Lambda Function Source Code Dependencies"
-  default     = []
+  default     = {}
 }
 
 variable "function_timeout" {

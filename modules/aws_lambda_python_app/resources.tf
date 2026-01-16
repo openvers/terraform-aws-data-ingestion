@@ -31,14 +31,23 @@ locals {
     "logs:PutLogEvents"
   ]
 
-  layer_arns = [for d in module.function_layers : d.layer_arn]
+  #https://github.com/awslabs/aws-lambda-web-adapter?tab=readme-ov-file#lambda-functions-packaged-as-zip-package-for-aws-managed-runtimes
+  layer_arns = concat(
+    [for d in module.function_layers : d.layer_arn],
+    ["arn:aws:lambda:${data.aws_region.current.region}:753240598075:layer:LambdaAdapterLayerX86:25"]
+  )
+
+  function_environment_variables = merge(var.function_environment_variables, {
+    AWS_LAMBDA_EXEC_WRAPPER = "/opt/bootstrap"
+    PORT : 8000
+  })
 }
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## ARCHIVE FILE DATA SOURCE
-## 
+##
 ## Zip the latest changes to the function source code prior to deployment.
-## 
+##
 ## Parameters:
 ## - `type`: Archive file type
 ## - `output_file_mode`: Unix permission
@@ -62,16 +71,16 @@ data "archive_file" "this" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## FUNCTION BUCKET MODULE
-## 
+##
 ## S3 Bucket to store AWS Lambda Function source code.
-## 
+##
 ## Parameters:
 ## - `bucket_name`: S3 bucket name.
 ## - `kms_key_arn`: KMS encryption key ARN.
 ## - `sns_topic_arn`: AWS SNS Topic ARN.
 ## ---------------------------------------------------------------------------------------------------------------------
 module "function_bucket" {
-  source = "github.com/sim-parables/terraform-aws-data-lake.git//modules/s3_bucket?ref=af8c8eba6f7dd2bd0fb81950117ef00be5a53bf4"
+  source = "github.com/openvers/terraform-aws-data-lake.git//modules/s3_bucket?ref=496c43258348e41337cf35a8d0c784b5fb606b8d"
 
   bucket_name = var.function_bucket_name
   kms_key_arn = var.kms_key_arn
@@ -83,9 +92,9 @@ module "function_bucket" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS S3 OBJECT RESOURCE
-## 
+##
 ## Upload the pipeline source code to trigger on every new blob upload on the trigger bucket.
-## 
+##
 ## Parameters:
 ## - `bucket`: S3 Bucket name where function source code will reside
 ## - `key`: Blob name for function source code artifact
@@ -101,9 +110,9 @@ resource "aws_s3_object" "this" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## FUNCTION LAYERS MODULE
-## 
+##
 ## Create AWS Lambda Function layers for source code dependencies.
-## 
+##
 ## Parameters:
 ## - `bucket_id`: S3 Bucket name where function source code resides.
 ## - `package_name`: PIP package name.
@@ -111,16 +120,12 @@ resource "aws_s3_object" "this" {
 ## - `function_runtime`: AWS Lamdba Function runtime environment.
 ## ---------------------------------------------------------------------------------------------------------------------
 module "function_layers" {
-  source = "../aws_functions_layers"
-  for_each = tomap({
-    for d in var.function_dependencies :
-    "${d.package_name}:${d.package_version}" => d
-  })
+  source   = "../aws_functions_layers"
+  for_each = var.function_dependencies
 
   bucket_id        = module.function_bucket.bucket_id
-  package_name     = each.value.package_name
-  package_version  = each.value.package_version
-  no_dependencies  = each.value.no_dependencies
+  layer_name       = each.key
+  layer_packages   = each.value
   function_runtime = var.function_runtime
 
   providers = {
@@ -131,7 +136,7 @@ module "function_layers" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS IAM POLICY DOCUMENT DATA SOURCE
-## 
+##
 ## Define a policy document to grant assume role STS permissions to Lambda Function Resource Principals.
 ## ---------------------------------------------------------------------------------------------------------------------
 data "aws_iam_policy_document" "assume_role" {
@@ -152,9 +157,9 @@ data "aws_iam_policy_document" "assume_role" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS IAM ROLE RESOURCE
-## 
+##
 ## Create a Lambda Function Role to assume policies for STS authentication.
-## 
+##
 ## Parameters:
 ## - `name`: AWS IAM Role name.
 ## - `assume_role_policy`: AWS IAM Policy document JSON.
@@ -169,10 +174,10 @@ resource "aws_iam_role" "this" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS CLOUDWATCH LOG GROUP RESOURCE
-## 
+##
 ## Create a Logging Group for the Lamdba Function to stream function execution logs to Cloud Watch.
 ## Without this resource, logs are stored indefinitely
-## 
+##
 ## Parameters:
 ## - `name`: AWS IAM Role name.
 ## - `retention_in_days`: AWS Cloudwatch Logs retention period in days.
@@ -187,7 +192,7 @@ resource "aws_cloudwatch_log_group" "this" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS IAM POLICY DOCUMENT DATA SOURCE
-## 
+##
 ## Define a policy document to grant resource access to S3 buckets, Cloudwatch logging, and SNS Publishing.
 ## ---------------------------------------------------------------------------------------------------------------------
 data "aws_iam_policy_document" "logs" {
@@ -251,9 +256,9 @@ data "aws_iam_policy_document" "logs" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS IAM ROLE POLICY RESOURCE
-## 
+##
 ## Bind AWS Lambda Function role with logs policy.
-## 
+##
 ## Parameters:
 ## - `name`: AWS IAM Role policy name.
 ## - `role`: AWS IAM Role ID.
@@ -269,10 +274,10 @@ resource "aws_iam_role_policy" "this" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS LAMBDA FUNCTION RESOURCE
-## 
+##
 ## Defines the ETL function to convert data in the Trigger Bucket to
 ## Parquet Format in the Results Bucket.
-## 
+##
 ## Parameters:
 ## - `function_name`: AWS Lambda Function name.
 ## - `role`: Lambda Function role.
@@ -290,7 +295,7 @@ resource "aws_lambda_function" "this" {
 
   function_name = var.function_name
   role          = aws_iam_role.this.arn
-  handler       = "${replace(var.function_contents[0].filename, ".py", "")}.${var.function_handler}"
+  handler       = var.function_handler
   runtime       = var.function_runtime
   s3_bucket     = module.function_bucket.bucket_id
   s3_key        = aws_s3_object.this.key
@@ -305,7 +310,7 @@ resource "aws_lambda_function" "this" {
   }
 
   environment {
-    variables = var.function_environment_variables
+    variables = local.function_environment_variables
   }
 
   tracing_config {

@@ -3,6 +3,8 @@ test/.terraform.lock.hcl
 test/source/*.zip
 test/unit_test/__pycache__/*
 \.pytest_cache
-test/source/fsspec/*
-test/source/s3fs/*
-test/source/typing-extensions/*
+test/source/file_system/*
+test/source/web_app/*
+.zed
+.terraform.lock.hcl
+.terraform

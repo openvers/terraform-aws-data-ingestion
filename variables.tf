@@ -59,7 +59,7 @@ variable "project_name" {
 variable "function_bucket_name" {
   type        = string
   description = "S3 Function Source Bucket Name"
-  default     = "blob-trigger-source-code-bucket"
+  default     = "data-ingestion-source-code-bucket"
 }
 
 variable "function_trigger_events" {
@@ -71,7 +71,7 @@ variable "function_trigger_events" {
 variable "function_runtime" {
   type        = string
   description = "AWS Lambda Function Runtime Environment"
-  default     = "python3.9"
+  default     = "python3.12"
 }
 
 variable "function_memory" {
@@ -81,13 +81,13 @@ variable "function_memory" {
 }
 
 variable "function_dependencies" {
-  type = list(object({
+  type = map(list(object({
     package_name    = string
     package_version = string
     no_dependencies = bool
-  }))
+  })))
   description = "AWS Lambda Function Source Code Dependencies"
-  default     = []
+  default     = {}
 }
 
 variable "function_timeout" {
@@ -114,16 +114,10 @@ variable "cloudwatch_logs_retention_days" {
   default     = 1
 }
 
-variable "api_path" {
-  type        = string
-  description = "API Gateway Path for Lambda Function"
-  default     = "data-ingestion"
-}
-
 variable "api_method" {
   type        = string
   description = "API Gateway Method for Lambda Function"
-  default     = "POST"
+  default     = "ANY"
 }
 
 variable "api_stage" {

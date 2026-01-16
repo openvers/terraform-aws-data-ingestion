@@ -152,7 +152,7 @@ provider "aws" {
 ## - `roles_list`: List of IAM roles to bing to new AWS Service Account.
 ##---------------------------------------------------------------------------------------------------------------------
 module "aws_service_account" {
-  source = "github.com/sim-parables/terraform-aws-service-account.git?ref=a18e50b961655a345a7fd2d8e573fe84484c7235"
+  source = "github.com/openvers/terraform-aws-service-account.git?ref=6ba54cf0fece6e4f2fbbfae5dacb9d7e91e984bb"
 
   service_account_name = var.service_account_name
   service_account_path = var.service_account_path
@@ -184,7 +184,7 @@ provider "aws" {
 ## - `assume_role_policies`: List of OIDC trust policies.
 ##---------------------------------------------------------------------------------------------------------------------
 module "aws_identity_federation_roles" {
-  source     = "github.com/sim-parables/terraform-aws-service-account.git//modules/identity_federation_roles?ref=a18e50b961655a345a7fd2d8e573fe84484c7235"
+  source     = "github.com/openvers/terraform-aws-service-account.git//modules/identity_federation_roles?ref=a18e50b961655a345a7fd2d8e573fe84484c7235"
   depends_on = [module.aws_service_account]
 
   assume_role_policies  = local.assume_role_policies
@@ -217,9 +217,9 @@ module "aws_identity_federation_roles" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## SNS TOPIC MODULE
-## 
+##
 ## Create an AWS SNS Topic.
-## 
+##
 ## Parameters:
 ## - `kms_key_id`: KMS key name.
 ## ---------------------------------------------------------------------------------------------------------------------
@@ -251,7 +251,7 @@ module "sns_topic" {
 ## - Additional configuration may be required for Lambda, KMS, and IAM integration depending on your use case.
 ## ---------------------------------------------------------------------------------------------------------------------
 module "data_lake" {
-  source     = "github.com/sim-parables/terraform-aws-data-lake.git?ref=af8c8eba6f7dd2bd0fb81950117ef00be5a53bf4"
+  source     = "github.com/openvers/terraform-aws-data-lake.git?ref=496c43258348e41337cf35a8d0c784b5fb606b8d"
   depends_on = [module.aws_service_account]
 
   bronze_bucket_name = "${local.suffix}-bronze"
@@ -266,16 +266,16 @@ module "data_lake" {
 
 ## ---------------------------------------------------------------------------------------------------------------------
 ## AWS LAMBDA FUNCTION MODULE
-## 
+##
 ## Create a HTTP trigger AWS Lambda Function for Data Ingestion into S3 Data Lake.
-## 
+##
 ## Parameters:
 ## - `function_name`: AWS Lambda Function name.
 ## - `function_handler`: AWS Lambda Function source handler function name.
 ## - `bronze_bucket_id`: S3 Bucket name for the bronze data layer.
 ## - `function_runtime`: AWS Lambda Function runtime environment.
 ## - `kms_key_arn`: KMS encryption key ARN.
-## - `sns_topic_arn`: SNS Topic ARN for Dead Letter Queue. 
+## - `sns_topic_arn`: SNS Topic ARN for Dead Letter Queue.
 ## - `function_contents`: List of function source code to archive and artifact for Lambda Functions.
 ## - `function_dependencies`: List of Python packages to install as dependencies for the Lambda Function.
 ## - `function_environment_variables`: Environment variables to set for the Lambda Function.
@@ -288,7 +288,7 @@ module "aws_lambda_function" {
   ]
 
   function_name    = "${local.suffix}-data-ingestion-lambda"
-  function_handler = "http_handler"
+  function_handler = "run.sh"
   sns_topic_arn    = module.sns_topic.sns_topic_arn
   kms_key_arn      = module.data_lake.kms_key_arn
   bucket_ids       = [module.data_lake.bronze_bucket_id]
@@ -301,26 +301,44 @@ module "aws_lambda_function" {
     {
       filename = "requirements.txt",
       filepath = abspath("./source/requirements.txt")
+    },
+    {
+      filename = "run.sh",
+      filepath = abspath("./source/run.sh")
     }
   ]
 
-  function_dependencies = [
-    {
-      package_name    = "s3fs",
-      package_version = "2022.11.0",
-      no_dependencies = false
-    },
-    {
-      package_name    = "fsspec",
-      package_version = "2022.11.0",
-      no_dependencies = false
-    },
-    {
-      package_name    = "typing-extensions",
-      package_version = "4.10.0",
-      no_dependencies = true
-    }
-  ]
+  function_dependencies = {
+    file_system = [
+      {
+        package_name    = "s3fs",
+        package_version = "2025.12.0",
+        no_dependencies = false
+      },
+      {
+        package_name    = "fsspec",
+        package_version = "2025.12.0",
+        no_dependencies = false
+      },
+      {
+        package_name    = "typing-extensions",
+        package_version = "4.10.0",
+        no_dependencies = false
+      },
+    ],
+    web_app = [
+      {
+        package_name    = "flask",
+        package_version = "3.1.2",
+        no_dependencies = false
+      },
+      {
+        package_name    = "gunicorn",
+        package_version = "23.0.0",
+        no_dependencies = false
+      }
+    ]
+  }
 
   function_environment_variables = {
     TARGET_BUCKET = module.data_lake.bronze_bucket_id

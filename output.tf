@@ -15,7 +15,7 @@ output "lambda_function_assume_role_arn" {
 
 output "api_gateway_invoke_url" {
   description = "Invoke URL for the deployed API Gateway stage."
-  value       = "${aws_api_gateway_stage.this.invoke_url}/${aws_api_gateway_resource.this.path_part}"
+  value       = aws_api_gateway_stage.this.invoke_url
 }
 
 output "api_gateway_key_id" {
