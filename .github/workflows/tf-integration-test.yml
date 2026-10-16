@@ -40,10 +40,11 @@ jobs:
   terraform-integration-plan:
     if: github.actor != 'github-actions[bot]'
     needs: [ reusable-env-vars ]
-    uses: sim-parables/github-workflows-reusable/.github/workflows/tf-integration-plan.yml@AWSv1
+    uses: openvers/github-workflows-reusable/.github/workflows/tf-integration-plan.yml@AWSv1
     secrets:
       AWS_CLIENT_ID: ${{ secrets.AWS_CLIENT_ID }}
       AWS_CLIENT_SECRET: ${{ secrets.AWS_CLIENT_SECRET }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
@@ -59,10 +60,11 @@ jobs:
   terraform-integration-apply:
     if: github.event.act || github.ref == 'refs/heads/main'
     needs: [ reusable-env-vars, terraform-integration-plan ]
-    uses: sim-parables/github-workflows-reusable/.github/workflows/tf-integration-apply.yml@AWSv1
+    uses: openvers/github-workflows-reusable/.github/workflows/tf-integration-apply.yml@AWSv1
     secrets:
       AWS_CLIENT_ID: ${{ secrets.AWS_CLIENT_ID }}
       AWS_CLIENT_SECRET: ${{ secrets.AWS_CLIENT_SECRET }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
@@ -89,10 +91,11 @@ jobs:
   terraform-integration-destroy:
     if: always()
     needs: [ reusable-env-vars, terraform-integration-test ]
-    uses: sim-parables/github-workflows-reusable/.github/workflows/tf-integration-destroy.yml@AWSv1
+    uses: openvers/github-workflows-reusable/.github/workflows/tf-integration-destroy.yml@AWSv1
     secrets:
       AWS_CLIENT_ID: ${{ secrets.AWS_CLIENT_ID }}
       AWS_CLIENT_SECRET: ${{ secrets.AWS_CLIENT_SECRET }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}

@@ -80,7 +80,7 @@ data "archive_file" "this" {
 ## - `sns_topic_arn`: AWS SNS Topic ARN.
 ## ---------------------------------------------------------------------------------------------------------------------
 module "function_bucket" {
-  source = "github.com/openvers/terraform-aws-data-lake.git//modules/s3_bucket?ref=496c43258348e41337cf35a8d0c784b5fb606b8d"
+  source = "github.com/openvers/terraform-aws-data-lake.git//modules/s3_bucket?ref=0dea10669724bca78f16c4743fad61486702cc2e"
 
   bucket_name = var.function_bucket_name
   kms_key_arn = var.kms_key_arn

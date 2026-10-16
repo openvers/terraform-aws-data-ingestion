@@ -251,7 +251,7 @@ module "sns_topic" {
 ## - Additional configuration may be required for Lambda, KMS, and IAM integration depending on your use case.
 ## ---------------------------------------------------------------------------------------------------------------------
 module "data_lake" {
-  source     = "github.com/openvers/terraform-aws-data-lake.git?ref=496c43258348e41337cf35a8d0c784b5fb606b8d"
+  source     = "github.com/openvers/terraform-aws-data-lake.git?ref=0dea10669724bca78f16c4743fad61486702cc2e"
   depends_on = [module.aws_service_account]
 
   bronze_bucket_name = "${local.suffix}-bronze"

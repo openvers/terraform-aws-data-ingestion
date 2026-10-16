@@ -42,10 +42,11 @@ jobs:
   terraform-dispatch-plan:
     if: "${{ github.event.act || github.event.inputs.terraform_operation == 'plan' }}"
     needs: [ reusable-env-vars ]
-    uses: sim-parables/github-workflows-reusable/.github/workflows/tf-dispatch-plan.yml@AWSv1
+    uses: openvers/github-workflows-reusable/.github/workflows/tf-dispatch-plan.yml@AWSv1
     secrets:
       AWS_CLIENT_ID: ${{ secrets.AWS_CLIENT_ID }}
       AWS_CLIENT_SECRET: ${{ secrets.AWS_CLIENT_SECRET }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
@@ -61,10 +62,11 @@ jobs:
   terraform-dispatch-apply:
     if: ${{ github.event.act || github.event.inputs.terraform_operation == 'apply' }}
     needs: [ reusable-env-vars ]
-    uses: sim-parables/github-workflows-reusable/.github/workflows/tf-dispatch-apply.yml@AWSv1
+    uses: openvers/github-workflows-reusable/.github/workflows/tf-dispatch-apply.yml@AWSv1
     secrets:
       AWS_CLIENT_ID: ${{ secrets.AWS_CLIENT_ID }}
       AWS_CLIENT_SECRET: ${{ secrets.AWS_CLIENT_SECRET }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
@@ -91,10 +93,11 @@ jobs:
   terraform-dispatch-destroy:
     if: ${{ github.event.act ||github.event.inputs.terraform_operation == 'destroy' }}
     needs: [ reusable-env-vars ]
-    uses: sim-parables/github-workflows-reusable/.github/workflows/tf-dispatch-destroy.yml@AWSv1
+    uses: openvers/github-workflows-reusable/.github/workflows/tf-dispatch-destroy.yml@AWSv1
     secrets:
       AWS_CLIENT_ID: ${{ secrets.AWS_CLIENT_ID }}
       AWS_CLIENT_SECRET: ${{ secrets.AWS_CLIENT_SECRET }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
@@ -106,4 +109,3 @@ jobs:
         TF_VAR_GITHUB_ENV="${{ needs.reusable-env-vars.outputs.TF_VAR_GITHUB_ENV }}"
     with:
       ACT_MODE: ${{ !!github.event.act }}
-

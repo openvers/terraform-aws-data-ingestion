@@ -8,3 +8,4 @@ test/source/web_app/*
 .zed
 .terraform.lock.hcl
 .terraform
+.tmp

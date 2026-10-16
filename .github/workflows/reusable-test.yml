@@ -24,7 +24,7 @@ on:
       AWS_REGION:
         description: |
           AWS Account Region
-        required: false
+        required: true
       TF_API_TOKEN:
         description: |
           Terraform.io Access Token
@@ -91,6 +91,8 @@ jobs:
         API_GATEWAY_URL: ${{ needs.terraform-output.outputs.API_GATEWAY_URL }}
         AWS_ACCESS_KEY_ID: ${{ needs.terraform-output.outputs.CLIENT_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ needs.terraform-output.outputs.CLIENT_SECRET }}
+        AWS_REGION: ${{ secrets.AWS_REGION }}
+        AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
     
     defaults:
       run:

@@ -5,7 +5,7 @@ on:
 
 jobs:
   terraform-unit-tests:
-    uses: sim-parables/github-workflows-reusable/.github/workflows/tf-unit-test.yml@AWSv1
+    uses: openvers/github-workflows-reusable/.github/workflows/tf-unit-test.yml@AWSv1
     name: 'Terraform Unit Tests'
     secrets: inherit
     with:

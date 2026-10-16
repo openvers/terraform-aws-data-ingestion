@@ -1,109 +1,239 @@
 <p float="left">
   <img id="b-0" src="https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white" height="25px"/>
   <img id="b-1" src="https://img.shields.io/badge/Amazon_AWS-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white" height="25px"/>
-  <img id="b-2" src="https://img.shields.io/github/actions/workflow/status/sim-parables/terraform-aws-blob-trigger/tf-integration-test.yml?style=flat&logo=github&label=CD%20(September%202024)" height="25px"/>
+  <img id="b-2" src="https://img.shields.io/github/actions/workflow/status/openvers/terraform-aws-data-ingestion/tf-integration-test.yml?style=flat&logo=github&label=CD" height="25px"/>
 </p>
 
+# Terraform AWS Data Ingestion Module
+
+## Overview
+
+This repository provides a modular Terraform implementation for provisioning a serverless HTTP data ingestion pipeline on AWS. It includes:
+- A Python Lambda application exposed through an API Gateway REST API
+- API key requirements and usage-plan throttling
+- S3 storage for Lambda source artifacts and access to existing ingestion buckets
+- Lambda dependency layers, IAM permissions, KMS integration, and CloudWatch logging
+- A reusable SNS topic module for Lambda dead-letter handling
+
+## Module Structure
+
+- `modules/aws_lambda_python_app/` – Python Lambda packaging, source artifact bucket, Lambda Web Adapter integration, IAM permissions, and logging
+- `modules/aws_functions_layers/` – Python dependency packaging and Lambda layer creation
+- `modules/aws_sns_topic/` – SNS topic creation with KMS encryption configuration
+
 ---
-
-# AWS Lambda HTTP Data Ingestion with API Gateway
-
-This repository provides a Terraform-based solution for deploying a serverless data ingestion pipeline on AWS. The core components include:
-
-- **AWS Lambda Function**: A Python-based Lambda function that ingests files via HTTP requests and writes them to an S3 bucket. The function expects a POST request with a file in the body and a filename in the query string or headers. The target S3 bucket is specified by the `TARGET_BUCKET` environment variable.
-
-- **API Gateway**: An AWS API Gateway REST API exposes the Lambda function as an HTTP endpoint. API key authentication is enabled for secure access. Requests must include the `x-api-key` header with a valid API key.
-
-- **S3 Buckets**: Used for storing ingested files and Lambda function artifacts.
-
-- **Terraform Modules**: Modularized infrastructure for Lambda, API Gateway, S3, and supporting resources. Includes reusable modules for Lambda layers and SNS topics.
-
-- **CI/CD & Testing**: GitHub Actions workflows for integration and unit testing, including local and OIDC-based test scenarios. Unit tests verify end-to-end ingestion by posting sample data to the API Gateway and checking S3 for the result.
-
-## Key Features
-- HTTP-triggered Lambda for file ingestion
-- API Gateway with API key authentication
-- Modular, reusable Terraform code
-- Automated tests and GitHub Actions integration
 
 ## Usage
-- Deploy with Terraform to provision all AWS resources
-- Use the outputted API Gateway URL and API key to POST files for ingestion
-- See the `test/unit_test/test_data_ingestion.py` for example usage and test automation
 
----
+The following example uses the bundled Flask application. Replace the bucket names and ARNs with existing resources, and set `source` to this module's location. Artifact bucket names must be globally unique.
 
+```hcl
+provider "aws" {
+  alias  = "auth_session"
+  region = "us-east-1"
+}
 
-## Local Actions
+module "data_ingestion" {
+  source = "../terraform-aws-data-ingestion"
 
-Validate Github Workflows locally with [Nekto's Act](https://nektosact.com/introduction.html). More info found in the Github Repo [https://github.com/nektos/act](https://github.com/nektos/act).
+  function_name        = "my-data-ingestion"
+  function_handler     = "run.sh"
+  function_bucket_name = "my-unique-ingestion-artifacts"
+  bucket_ids           = ["my-bronze-bucket"]
+  kms_key_arn          = "arn:aws:kms:us-east-1:123456789012:key/your-key-id"
+  sns_topic_arn        = "arn:aws:sns:us-east-1:123456789012:my-dead-letter-topic"
 
-### Prerequisits
+  function_contents = [
+    for filename in ["main.py", "requirements.txt", "run.sh"] : {
+      filename = filename
+      filepath = "${path.module}/../terraform-aws-data-ingestion/test/source/${filename}"
+    }
+  ]
 
-Store the identical Secrets in Github Organization/Repository to local workstation
+  function_dependencies = {
+    application = [
+      {
+        package_name    = "flask"
+        package_version = "3.1.2"
+        no_dependencies = false
+      },
+      {
+        package_name    = "gunicorn"
+        package_version = "23.0.0"
+        no_dependencies = false
+      },
+      {
+        package_name    = "s3fs"
+        package_version = "2025.12.0"
+        no_dependencies = false
+      }
+    ]
+  }
+
+  function_environment_variables = {
+    TARGET_BUCKET = "my-bronze-bucket"
+  }
+
+  providers = {
+    aws.auth_session = aws.auth_session
+  }
+}
+```
+
+See [`variables.tf`](./variables.tf) for module inputs and [`output.tf`](./output.tf) for outputs, including `api_gateway_invoke_url` and the sensitive `api_gateway_key_value`. A complete deployment combining the ingestion module, data lake, and SNS topic is provided in [`test/main.tf`](./test/main.tf).
+
+After deploying the test harness below, upload a file using its outputs:
 
 ```bash
-cat <<EOF > ~/creds/aws.secrets
-# Terraform.io Token
-TF_API_TOKEN=[COPY/PASTE MANUALLY]
+export API_GATEWAY_URL="$(terraform -chdir=test output -raw api_gateway_invoke_url)"
+export API_GATEWAY_KEY="$(terraform -chdir=test output -raw api_gateway_key_value)"
 
-# Github PAT
-GITHUB_TOKEN=$(git auth token)
+curl --fail-with-body \
+  --header "x-api-key: ${API_GATEWAY_KEY}" \
+  --form "files=@./test/source/requirements.txt" \
+  "${API_GATEWAY_URL}/api/upload"
+```
 
-# AWS
-AWS_REGION=$(aws configure get region)
-AWS_OIDC_PROVIDER_ARN=[COPY/PASTE MANUALLY]
-AWS_CLIENT_ID=[COPY/PASTE MANUALLY]
-AWS_CLIENT_SECRET=[COPY/PASTE MANUALLY]
-AWS_ROLE_TO_ASSUME=[COPY/PASTE MANUALLY]
-AWS_ROLE_EXTERNAL_ID=[COPY/PASTE MANUALLY]
+The application uses the uploaded filename, sanitized with `secure_filename`, as the S3 object key. Multiple files can be sent by repeating the `files` form field.
+
+## Testing
+
+A test harness is provided in the [`test/`](./test/) directory. It includes:
+- Service account and GitHub Actions OIDC federation setup
+- Bronze, Silver, and Gold buckets and a KMS key through the Data Lake module
+- An SNS topic, the sample Lambda application, and API Gateway deployment
+- Terraform outputs for local tests and CI/CD pipelines
+- Pytest checks that upload sample data over HTTP and verify the resulting S3 object
+
+Validate GitHub workflows locally with [Nektos Act](https://nektosact.com/introduction.html). More information is available in the [Act repository](https://github.com/nektos/act).
+
+### Prerequisites
+
+```bash
+
+# [TODO] Remainig Under Construction (AWS portal steps/ equiv. CLI commands)
+# [TODO] Add the AWSReservedSSO_AdministratorAccess to the Assume Role supplied in <service-principal-arn>
+
+cat << 'EOF' > ~/creds/aws.secrets.envrc
+SERVICE_PRINCIPAL_ROLE_ARN="<service-principal-arn>"
+
+AWS_CREDS=$(
+  aws sts assume-role \
+    --role-arn "${SERVICE_PRINCIPAL_ROLE_ARN}" \
+    --role-session-name "terraform-developer-session"
+)
+
+export AWS_CLIENT_ID=$(echo $AWS_CREDS | jq -r '.Credentials.AccessKeyId')
+export AWS_CLIENT_SECRET=$(echo $AWS_CREDS | jq -r '.Credentials.SecretAccessKey')
+export AWS_SESSION_TOKEN=$(echo $AWS_CREDS | jq -r '.Credentials.SessionToken')
+
+export AWS_OIDC_PROVIDER_ARN=$(aws iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[0].Arn' --output text)
+export TF_VAR_OIDC_PROVIDER_ARN=$AWS_OIDC_PROVIDER_ARN
+
+export TF_API_TOKEN=$(cat ~/.terraform.d/credentials.tfrc.json | jq -r '.credentials."app.terraform.io".token')
 EOF
+```
+
+### Local Deployment Testing
+
+```bash
+aws sso login
+terraform login app.terraform.io
+
+terraform -chdir=test init
+terraform -chdir=test plan
+terraform -chdir=test apply -auto-approve
+
+export TARGET_BUCKET="$(terraform -chdir=test output -raw bronze_bucket_id)"
+export API_GATEWAY_URL="$(terraform -chdir=test output -raw api_gateway_invoke_url)"
+export API_GATEWAY_KEY="$(terraform -chdir=test output -raw api_gateway_key_value)"
+
+python3 -m pytest test/unit_test -m "local and env" -rs
+
+terraform -chdir=test destroy -auto-approve
 ```
 
 ### Manual Dispatch Testing
 
 ```bash
-# Try the Terraform Read job first
+# Try the Terraform plan job first
 act -j terraform-dispatch-plan \
-    -e .github/local.json \
-    --secret-file ~/creds/aws.secrets \
-    --remote-name $(git remote show)
+  -e .github/local.json \
+  -s AWS_CLIENT_ID \
+  -s AWS_CLIENT_SECRET \
+  -s AWS_SESSION_TOKEN \
+  -s AWS_REGION \
+  -s AWS_OIDC_PROVIDER_ARN \
+  -s TF_VAR_OIDC_PROVIDER_ARN \
+  -s TF_API_TOKEN \
+  --remote-name origin
 
 act -j terraform-dispatch-apply \
-    -e .github/local.json \
-    --secret-file ~/creds/aws.secrets \
-    --remote-name $(git remote show)
+  -e .github/local.json \
+  -s AWS_CLIENT_ID \
+  -s AWS_CLIENT_SECRET \
+  -s AWS_SESSION_TOKEN \
+  -s AWS_REGION \
+  -s AWS_OIDC_PROVIDER_ARN \
+  -s TF_VAR_OIDC_PROVIDER_ARN \
+  -s TF_API_TOKEN \
+  --remote-name origin
 
 act -j terraform-dispatch-test \
-    -e .github/local.json \
-    --secret-file ~/creds/aws.secrets \
-    --remote-name $(git remote show)
+  -e .github/local.json \
+  -s AWS_CLIENT_ID \
+  -s AWS_CLIENT_SECRET \
+  -s AWS_SESSION_TOKEN \
+  -s AWS_REGION \
+  -s AWS_OIDC_PROVIDER_ARN \
+  -s TF_VAR_OIDC_PROVIDER_ARN \
+  -s TF_API_TOKEN \
+  --remote-name origin
 
 act -j terraform-dispatch-destroy \
-    -e .github/local.json \
-    --secret-file ~/creds/aws.secrets \
-    --remote-name $(git remote show)
+  -e .github/local.json \
+  -s AWS_CLIENT_ID \
+  -s AWS_CLIENT_SECRET \
+  -s AWS_SESSION_TOKEN \
+  -s AWS_REGION \
+  -s AWS_OIDC_PROVIDER_ARN \
+  -s TF_VAR_OIDC_PROVIDER_ARN \
+  -s TF_API_TOKEN \
+  --remote-name origin
 ```
 
 ### Integration Testing
 
 ```bash
-# Create an artifact location to upload/download between steps locally
-mkdir /tmp/artifacts
+# Create an artifact location for local workflow uploads/downloads
+mkdir -p /tmp/artifacts
 
-# Run the full Integration test with
 act -j terraform-integration-destroy \
-    -e .github/local.json \
-    --secret-file ~/creds/aws.secrets \
-    --remote-name $(git remote show) \
-    --artifact-server-path /tmp/artifacts
+  -e .github/local.json \
+  -s AWS_CLIENT_ID \
+  -s AWS_CLIENT_SECRET \
+  -s AWS_SESSION_TOKEN \
+  -s AWS_REGION \
+  -s AWS_OIDC_PROVIDER_ARN \
+  -s TF_VAR_OIDC_PROVIDER_ARN \
+  -s TF_API_TOKEN \
+  --remote-name origin \
+  --artifact-server-path /tmp/artifacts
 ```
 
 ### Unit Testing
 
+Run the Terraform unit-test workflow independently:
+
 ```bash
 act -j terraform-unit-tests \
-    -e .github/local.json \
-    --secret-file ~/creds/aws.secrets \
-    --remote-name $(git remote show)
+  -e .github/local.json \
+  --secret-file ~/creds/aws.secrets \
+  --remote-name origin
 ```
+
+---
+
+## License
+
+See [LICENSE](./LICENSE) for details.
